@@ -146,10 +146,11 @@ def correlation_matrix(df, cols):
     plt.xticks(fontsize=10)
     plt.yticks(fontsize=10)
     sns.heatmap(
-        df[cols].corr(), annot=True, linewidths=0.5,
+        df[cols].corr(), annot=False, linewidths=0.5,
         annot_kws={"size": 12}, linecolor="w", cmap="RdBu",
     )
     plt.show(block=True)
+    plt.close()
 
 
 def high_correlated_cols(dataframe, plot=False, corr_th=0.90):
@@ -169,9 +170,9 @@ def high_correlated_cols(dataframe, plot=False, corr_th=0.90):
     if plot:
         corr = dataframe[numeric_list].drop(trash_list, axis=1).corr()
         mask = np.triu(np.ones_like(corr, dtype=bool))
-        fig, ax = plt.subplots(figsize=(15, 15))
+        fig, ax = plt.subplots(figsize=(25, 20))
         sns.heatmap(
-            corr, mask=mask, cmap="RdBu", annot=True, fmt=".2f",
+            corr, mask=mask, cmap="RdBu", annot=False, fmt=".2f",
             vmin=-1, vmax=1, linewidths=0.5, square=True, ax=ax,
         )
         ax.set_title("Correlation Matrix", fontsize=16, pad=15)
@@ -331,7 +332,7 @@ base_regressors = [
     ("XGBoost", XGBRegressor(random_state=42)),
     ("LightGBM", LGBMRegressor(verbose=-1, random_state=42)),
 ]
-def base_models_regression(X, y, scoring="neg_mean_absolute_error"):
+def base_models_regression(X, y, scoring="r2"):
     """Evaluates multiple regression models using cross-validation and prints their baseline performance scores."""
     print("Base Models......")
     for name, regressor in base_regressors:

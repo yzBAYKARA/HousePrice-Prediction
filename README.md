@@ -9,7 +9,7 @@ An end-to-end machine learning pipeline for predicting residential house prices 
 
 ---
 
-#  Project Overview
+# Project Overview
 
 This project predicts residential house prices using the **House Prices: Advanced Regression Techniques** dataset provided by Kaggle.
 
@@ -32,7 +32,7 @@ The pipeline includes:
 
 ---
 
-#  Dataset
+# Dataset
 
 This project uses the **House Prices: Advanced Regression Techniques** dataset from Kaggle.
 
@@ -47,7 +47,7 @@ https://www.kaggle.com/competitions/house-prices-advanced-regression-techniques
 
 ---
 
-#  Project Workflow
+# Project Workflow
 
 ```text
 Raw Dataset
@@ -91,7 +91,7 @@ Prediction
 
 ---
 
-#  Exploratory Data Analysis
+# Exploratory Data Analysis
 
 The exploratory analysis includes:
 
@@ -115,7 +115,7 @@ The figure below illustrates the relationships among numerical variables and was
 
 ---
 
-#  Data Preprocessing & Feature Engineering
+# Data Preprocessing & Feature Engineering
 
 ## Missing Value Handling
 
@@ -150,7 +150,7 @@ The following new features were created:
 
 ---
 
-#  Machine Learning Models
+# Machine Learning Models
 
 The following regression algorithms were evaluated using **3-Fold Cross Validation**.
 
@@ -175,7 +175,7 @@ Lower MAE values indicate better predictive performance.
 
 ---
 
-#  Model Performance
+# Model Performance
 
 Baseline models were evaluated using **3-Fold Cross Validation** with **Mean Absolute Error (MAE)**.
 
@@ -194,7 +194,7 @@ Among the evaluated baseline models, **Gradient Boosting Regressor** achieved th
 
 ---
 
-#  Hyperparameter Optimization
+# Hyperparameter Optimization
 
 Hyperparameter tuning was performed using **GridSearchCV**.
 
@@ -206,15 +206,23 @@ The following algorithms were optimized:
 - XGBoost
 - LightGBM
 
-The best-performing models were subsequently combined using a Voting Regressor.
+After optimization, the best-performing models were combined into a Voting Regressor to improve overall prediction performance.
 
 ---
 
-#  Ensemble Learning
+# Ensemble Learning
 
-The optimized models were combined using a **Voting Regressor** to improve overall prediction performance.
+The optimized models were combined using a **Voting Regressor**.
 
-The trained ensemble model is serialized using Joblib.
+The final ensemble model achieved the following cross-validation performance:
+
+| Metric | Score |
+|---------|------:|
+| **MAE** | **14,810.21** |
+| **MSE** | **680,033,315.28** |
+| **R² Score** | **0.8938** |
+
+The trained ensemble model is serialized using Joblib for future predictions.
 
 ```python
 joblib.dump(voting_reg, "voting_reg.pkl")
@@ -222,7 +230,7 @@ joblib.dump(voting_reg, "voting_reg.pkl")
 
 ### Feature Importance (Gradient Boosting Regressor)
 
-The figure below illustrates the relative importance of the features learned by the optimized Gradient Boosting model.
+The figure below illustrates the relative contribution of each feature learned by the optimized Gradient Boosting model. Features with higher importance have a greater influence on the model's predictions.
 
 <p align="center">
     <img src="images/feature_importance.png" width="750">
@@ -230,7 +238,7 @@ The figure below illustrates the relative importance of the features learned by 
 
 ---
 
-#  Prediction
+# Prediction
 
 The trained model can be loaded and used to predict unseen observations.
 
@@ -242,9 +250,11 @@ prediction = model.predict(random_house)
 print(prediction)
 ```
 
+The prediction pipeline automatically applies the same preprocessing and feature engineering steps used during model training before generating the final house price prediction.
+
 ---
 
-#  Project Structure
+# Project Structure
 
 ```text
 HousePrice/
@@ -270,7 +280,7 @@ HousePrice/
 
 ---
 
-#  Installation
+# Installation
 
 Clone the repository.
 
@@ -314,7 +324,7 @@ python HP_Prediction.py
 
 ---
 
-#  Dependencies
+# Dependencies
 
 Major libraries used in this project:
 
@@ -331,7 +341,7 @@ See **requirements.txt** for the complete dependency list.
 
 ---
 
-#  Future Improvements
+# Future Improvements
 
 Potential future enhancements include:
 
@@ -339,11 +349,12 @@ Potential future enhancements include:
 - Model explainability with SHAP
 - Hyperparameter optimization using Optuna
 - Automated preprocessing using `sklearn.pipeline.Pipeline`
+- Docker containerization
 - Kaggle leaderboard evaluation
 
 ---
 
-#  Author
+# Author
 
 **Yusuf Ziya BAYKARA**
 

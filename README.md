@@ -1,4 +1,4 @@
-# 🏠 House Price Prediction using Machine Learning
+# House Price Prediction using Machine Learning
 
 ![Python](https://img.shields.io/badge/Python-3.10-blue)
 ![scikit-learn](https://img.shields.io/badge/scikit--learn-Machine%20Learning-orange)
@@ -286,7 +286,7 @@ pip install -r requirements.txt
 
 ---
 
-# ▶ Usage
+# Usage
 
 ### Exploratory Data Analysis
 

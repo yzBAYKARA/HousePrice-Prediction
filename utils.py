@@ -3,31 +3,25 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
+from pathlib import Path
 
 # Scaling
 from sklearn.preprocessing import RobustScaler
 
 # Linear Models
-from sklearn.linear_model import LogisticRegression, LinearRegression
+from sklearn.linear_model import LinearRegression
 
 # Neighbors
-from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
-
-# SVM
-from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsRegressor
 
 # Trees
-from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+from sklearn.tree import DecisionTreeRegressor
 
 # Ensemble
 from sklearn.ensemble import (
-    RandomForestClassifier,
     RandomForestRegressor,
-    GradientBoostingClassifier,
     GradientBoostingRegressor,
-    AdaBoostClassifier,
     AdaBoostRegressor,
-    VotingClassifier,
     VotingRegressor,
 )
 
@@ -36,8 +30,8 @@ from sklearn.model_selection import cross_validate, GridSearchCV
 from sklearn.preprocessing import LabelEncoder
 
 # Boosting
-from xgboost import XGBClassifier, XGBRegressor
-from lightgbm import LGBMClassifier, LGBMRegressor
+from xgboost import XGBRegressor
+from lightgbm import LGBMRegressor
 
 pd.set_option("display.max_columns", None)
 pd.set_option("display.width", 500)
@@ -46,6 +40,11 @@ pd.set_option("display.width", 500)
 # =============================================================================
 # 1. EXPLORATORY DATA ANALYSIS (EDA)
 # =============================================================================
+
+def load_data(filename="housepricetrain.csv"):
+    data_path = Path("datasets") / filename
+    return pd.read_csv(data_path)
+
 
 def check_df(dataframe, head=5):
     """Summarizes the overall structure of a dataset,
@@ -100,6 +99,15 @@ def grab_col_names(dataframe, cat_th=10, car_th=20):
         col for col in dataframe.columns
         if dataframe[col].dtypes != "O" and col not in num_but_cat
     ]
+    return cat_cols, num_cols, cat_but_car
+
+
+def update_cols(dataframe):
+    cat_cols, num_cols, cat_but_car = grab_col_names(dataframe, cat_th=10)
+    num_cols.remove("MSSubClass")
+    num_cols.remove("MoSold")
+    cat_cols.append("MSSubClass")
+    cat_cols.append("MoSold")
     return cat_cols, num_cols, cat_but_car
 
 
@@ -229,10 +237,15 @@ def remove_outlier(dataframe, col_name):
 
 
 def replace_with_thresholds(dataframe, col_name):
-    """Caps outliers at the calculated lower and upper threshold values (in-place)."""
     low_limit, up_limit = outlier_thresholds(dataframe, col_name)
-    dataframe.loc[dataframe[col_name] < low_limit, col_name] = low_limit
-    dataframe.loc[dataframe[col_name] > up_limit, col_name] = up_limit
+
+    if pd.api.types.is_integer_dtype(dataframe[col_name]):
+        dataframe[col_name] = dataframe[col_name].astype(float)
+
+    dataframe[col_name] = dataframe[col_name].clip(
+        lower=low_limit,
+        upper=up_limit
+    )
 
 
 # --- Missing Values ---
@@ -296,6 +309,7 @@ def rare_analyser(dataframe, target, cat_cols):
             "TARGET_MEAN": dataframe.groupby(col)[target].mean(),
         }).sort_values("RATIO", ascending=False), end="\n\n\n")
 
+
 def rare_encoder(dataframe, rare_perc):
     """
     Groups categories with frequencies below the specified threshold into a single 'Rare' category.
@@ -308,8 +322,7 @@ def rare_encoder(dataframe, rare_perc):
     temp_df = dataframe.copy()
     rare_columns = [
         col for col in temp_df.columns
-        if temp_df[col].dtypes == "O"
-        and (temp_df[col].value_counts() / len(temp_df) < rare_perc).any(axis=None)
+        if temp_df[col].dtypes == "O" and (temp_df[col].value_counts() / len(temp_df) < rare_perc).any(axis=None)
     ]
     for var in rare_columns:
         tmp = temp_df[var].value_counts() / len(temp_df)
@@ -332,31 +345,13 @@ base_regressors = [
     ("XGBoost", XGBRegressor(random_state=42)),
     ("LightGBM", LGBMRegressor(verbose=-1, random_state=42)),
 ]
-def base_models_regression(X, y, scoring="r2"):
+
+
+def base_models_regression(X, y, scoring="neg_mean_absolute_error"):
     """Evaluates multiple regression models using cross-validation and prints their baseline performance scores."""
     print("Base Models......")
     for name, regressor in base_regressors:
-        cv_results = cross_validate(regressor, X, y, cv=3, scoring=scoring)
-        print(f"{scoring}: {round(cv_results['test_score'].mean(), 4)} ({name})")
-
-
-def base_models_classification(X, y, scoring="roc_auc"):
-    """Evaluates multiple classification models using cross-validation and prints their baseline performance scores."""
-    print("Base Models......")
-    classifiers = [
-        ("LR", LogisticRegression()),
-        ("KNN", KNeighborsClassifier()),
-        ("SVC", SVC()),
-        ("CART", DecisionTreeClassifier()),
-        ("RF", RandomForestClassifier()),
-        ("Adaboost", AdaBoostClassifier()),
-        ("GBM", GradientBoostingClassifier()),
-        ("XGBoost", XGBClassifier(eval_metric="logloss")),
-        ("LightGBM", LGBMClassifier(verbose=-1)),
-        # ("Catboost", CatBoostClassifier(verbose=False)),
-    ]
-    for name, classifier in classifiers:
-        cv_results = cross_validate(classifier, X, y, cv=3, scoring=scoring)
+        cv_results = cross_validate(regressor, X, y, cv=5, scoring=scoring)
         print(f"{scoring}: {round(cv_results['test_score'].mean(), 4)} ({name})")
 
 
@@ -364,84 +359,31 @@ def base_models_classification(X, y, scoring="roc_auc"):
 # 4. HYPERPARAMETER OPTIMIZATION
 # =============================================================================
 
-knn_params = {"n_neighbors": range(2, 50)}
-
-cart_params = {
-    "max_depth": range(1, 20),
-    "min_samples_split": range(2, 30),
-}
-
-rf_params = {
-    "n_estimators": [100, 200, 300, 500],
-    "max_depth": [None, 10, 20, 30],
-    "min_samples_split": [2, 5, 10],
-    "min_samples_leaf": [1, 2, 4],
-    "max_features": ["sqrt", "log2", 1.0],
-}
-
-xgboost_params = {
-    "learning_rate": [0.1, 0.01],
-    "max_depth": [5, 8],
-    "n_estimators": [100, 200],
-}
-
-lightgbm_params = {
-    "learning_rate": [0.01, 0.1],
-    "n_estimators": [300, 500],
-}
-
-
-classifiers = [
-    ("KNN", KNeighborsClassifier(), knn_params),
-    ("CART", DecisionTreeClassifier(), cart_params),
-    ("RF", RandomForestClassifier(), rf_params),
-    ("XGBoost", XGBClassifier(eval_metric="logloss", device="cpu"), xgboost_params),
-    ("LightGBM", LGBMClassifier(verbose=-1), lightgbm_params),
-]
-
-def hyperparameter_optimization_classification(X, y, cv=3, scoring="roc_auc"):
-    """
-    Performs hyperparameter tuning for the predefined classification models using GridSearchCV.
-
-    Returns
-    -------
-    best_models : dict
-        Dictionary containing the optimized models in the format {model_name: optimized_model}.
-    """
-    print("Hyperparameter Optimization.....")
-    best_models = {}
-    for name, classifier, params in classifiers:
-        print(f"######## {name} ########")
-        cv_results = cross_validate(classifier, X, y, cv=cv, scoring=scoring)
-        print(f"{scoring} (Before): {round(cv_results['test_score'].mean(), 4)}")
-
-        gs_best = GridSearchCV(classifier, params, cv=cv, n_jobs=-1, verbose=False).fit(X, y)
-        final_model = classifier.set_params(**gs_best.best_params_)
-
-        cv_results = cross_validate(final_model, X, y, cv=cv, scoring=scoring)
-        print(f"{scoring} (After): {round(cv_results['test_score'].mean(), 4)}")
-        print(f"{name} best params: {gs_best.best_params_}", end="\n\n")
-        best_models[name] = final_model
-
-    return best_models
-
 regressors = [
     ("CART", DecisionTreeRegressor(random_state=42), {'max_depth': [None] + list(range(1, 35)),
-                                       "min_samples_split": range(2, 15)}),
+                                                      "min_samples_split": range(2, 15)}),
     ("RF", RandomForestRegressor(random_state=42), {"max_depth": [None, 10, 20, 30],
-                                     "max_features": ["sqrt", "log2", 1.0],
-                                     "min_samples_split": [2, 5, 10],
-                                    "min_samples_leaf": [1, 2, 4],
-                                     "n_estimators": [100, 200, 300, 500]}),
+                                                    "max_features": ["sqrt", "log2", 1.0],
+                                                    "min_samples_split": [2, 5, 10],
+                                                    "min_samples_leaf": [1, 2, 4],
+                                                    "n_estimators": [100, 200, 300, 500]}),
     ("XGBoost", XGBRegressor(device='cpu'), {"learning_rate": [0.1, 0.01],
-                                  "max_depth": [5, 8],
-                                  "n_estimators": [100, 200]}),
+                                             "max_depth": [5, 8],
+                                             "n_estimators": [100, 200]}),
     ("LightGBM", LGBMRegressor(verbose=-1, random_state=42), {"learning_rate": [0.01, 0.1, 0.5],
-                                              "n_estimators": list(range(100, 1000, 100))}),
-    ("GBM", GradientBoostingRegressor(random_state=42), {"learning_rate": [0.1, 0.01, 0.5],
-                                           "max_depth": range(1, 6),
-                                           "n_estimators": range(100, 1000, 100)}),
+                                                              "n_estimators": list(range(100, 1000, 100))}),
+    ("GBM", GradientBoostingRegressor(random_state=42), {
+        "n_estimators": [100, 200, 300, 500],
+        "learning_rate": [0.01, 0.05, 0.1],
+        "max_depth": [2, 3, 4, 5],
+        "subsample": [0.7, 0.8, 1.0],
+        "min_samples_leaf": [1, 2, 5],
+        "min_samples_split": [2, 5, 10],
+        "max_features": [None, "sqrt", 0.8]
+    }),
 ]
+
+
 def hyperparameter_optimization_regression(X, y, cv=5, scoring="neg_mean_absolute_error"):
     """
     Performs hyperparameter tuning for the predefined regression models using GridSearchCV.
@@ -458,7 +400,7 @@ def hyperparameter_optimization_regression(X, y, cv=5, scoring="neg_mean_absolut
         cv_results = cross_validate(regressor, X, y, cv=cv, scoring=scoring)
         print(f"{scoring} (Before): {round(cv_results['test_score'].mean(), 4)}")
 
-        gs_best = GridSearchCV(regressor, params, cv=cv, n_jobs=-1, verbose=False).fit(X, y)
+        gs_best = GridSearchCV(regressor, params, cv=cv, n_jobs=-1, verbose=False, scoring=scoring).fit(X, y)
         final_model = regressor.set_params(**gs_best.best_params_)
 
         cv_results = cross_validate(final_model, X, y, cv=cv, scoring=scoring)
@@ -469,35 +411,36 @@ def hyperparameter_optimization_regression(X, y, cv=5, scoring="neg_mean_absolut
     return best_models
 
 
+def plot_feature_importance(model, features, num=20, save=False):
+    feature_imp = (
+        pd.DataFrame(
+            {
+                "Feature": features.columns,
+                "Importance": model.feature_importances_
+            }
+        )
+        .sort_values("Importance", ascending=False)
+    )
+
+    plt.figure(figsize=(10, 8))
+    plt.barh(
+        feature_imp["Feature"][:num][::-1],
+        feature_imp["Importance"][:num][::-1]
+    )
+    plt.xlabel("Importance")
+    plt.title("Gradient Boosting Feature Importance")
+    plt.tight_layout()
+
+    if save:
+        plt.savefig("images/feature_importance.png", dpi=300)
+
+    plt.show()
+    plt.close()
+
 
 # =============================================================================
 # 5. ENSEMBLE / STACKING
 # =============================================================================
-
-def voting_classifier(best_models, X, y):
-    """
-    Combines the KNN, Random Forest, and LightGBM models using soft voting.
-
-    Returns
-    -------
-    voting_clf : fitted VotingClassifier
-        Trained VotingClassifier ensemble model.
-    """
-    print("Voting Classifier...")
-    voting_clf = VotingClassifier(
-        estimators=[
-            ("KNN", best_models["KNN"]),
-            ("RF", best_models["RF"]),
-            ("LightGBM", best_models["LightGBM"]),
-        ],
-        voting="soft",
-    ).fit(X, y)
-
-    cv_results = cross_validate(voting_clf, X, y, cv=3, scoring=["accuracy", "f1", "roc_auc"])
-    print(f"Accuracy : {cv_results['test_accuracy'].mean():.4f}")
-    print(f"F1 Score : {cv_results['test_f1'].mean():.4f}")
-    print(f"ROC AUC  : {cv_results['test_roc_auc'].mean():.4f}")
-    return voting_clf
 
 def voting_regressor(best_models, X, y):
     """
@@ -526,102 +469,93 @@ def voting_regressor(best_models, X, y):
     print(f"R2  : {cv_results['test_r2'].mean():.4f}")
     return voting_reg
 
+
+# =============================================================================
+# 6. PIPELINE
+# =============================================================================
 def houseprice_data_prep(dataframe):
-        cat_cols, num_cols, cat_but_car = grab_col_names(dataframe)
-        num_cols.remove("MSSubClass")
-        num_cols.remove("MoSold")
-        cat_cols.append("MSSubClass")
-        cat_cols.append("MoSold")
+    cat_cols, num_cols, cat_but_car = update_cols(dataframe)
 
-        # Eksik değer doldurma
-        dataframe["LotFrontage"] = dataframe["LotFrontage"].fillna(dataframe["LotFrontage"].median())
-        dataframe["MasVnrArea"] = dataframe["MasVnrArea"].fillna(dataframe["MasVnrArea"].median())
-        dataframe["Electrical"] = dataframe["Electrical"].fillna(dataframe["Electrical"].mode()[0])
+    # Eksik değer doldurma
+    dataframe["LotFrontage"] = dataframe["LotFrontage"].fillna(dataframe["LotFrontage"].median())
+    dataframe["MasVnrArea"] = dataframe["MasVnrArea"].fillna(dataframe["MasVnrArea"].median())
+    dataframe["Electrical"] = dataframe["Electrical"].fillna(dataframe["Electrical"].mode()[0])
 
-        dataframe["Alley"] = dataframe["Alley"].fillna("None")
-        dataframe["MasVnrType"] = dataframe["MasVnrType"].fillna("None")
-        dataframe["FireplaceQu"] = dataframe["FireplaceQu"].fillna("None")
-        dataframe["Fence"] = dataframe["Fence"].fillna("None")
-        dataframe["MiscFeature"] = dataframe["MiscFeature"].fillna("None")
+    dataframe["Alley"] = dataframe["Alley"].fillna("None")
+    dataframe["MasVnrType"] = dataframe["MasVnrType"].fillna("None")
+    dataframe["FireplaceQu"] = dataframe["FireplaceQu"].fillna("None")
+    dataframe["Fence"] = dataframe["Fence"].fillna("None")
+    dataframe["MiscFeature"] = dataframe["MiscFeature"].fillna("None")
 
-        dataframe['HAS_POOL'] = dataframe['PoolQC'].notnull().astype(int)
-        dataframe['PoolQC'] = dataframe['PoolQC'].fillna("None")
+    dataframe['HAS_POOL'] = dataframe['PoolQC'].notnull().astype(int)
+    dataframe['PoolQC'] = dataframe['PoolQC'].fillna("None")
 
-        garage_cols = [col for col in dataframe.columns if "Garage" in col]
-        bsmt_cols = [col for col in dataframe.columns if "Bsmt" in col]
+    garage_cols = [col for col in dataframe.columns if "Garage" in col]
+    bsmt_cols = [col for col in dataframe.columns if "Bsmt" in col]
 
-        for col in garage_cols:
-            if dataframe[col].dtypes == 'object':
-                dataframe[col] = dataframe[col].fillna("None")
-            else:
-                dataframe[col] = dataframe[col].fillna(0)
+    for col in garage_cols:
+        if dataframe[col].dtypes == 'object':
+            dataframe[col] = dataframe[col].fillna("None")
+        else:
+            dataframe[col] = dataframe[col].fillna(0)
 
-        for col in bsmt_cols:
-            if dataframe[col].dtypes == 'object':
-                dataframe[col] = dataframe[col].fillna("None")
-            else:
-                dataframe[col] = dataframe[col].fillna(0)
+    for col in bsmt_cols:
+        if dataframe[col].dtypes == 'object':
+            dataframe[col] = dataframe[col].fillna("None")
+        else:
+            dataframe[col] = dataframe[col].fillna(0)
 
-        quality_map = {"None": 0, "Po": 1, "Fa": 2, "TA": 3, "Gd": 4, "Ex": 5}
-        bsmt_fin_map = {"None": 0, "Unf": 1, "LwQ": 2, "Rec": 3, "BLQ": 4, "ALQ": 5, "GLQ": 6}
+    QUALITY_MAP = {"None": 0, "Po": 1, "Fa": 2, "TA": 3, "Gd": 4, "Ex": 5}
+    BSMT_FIN_MAP = {"None": 0, "Unf": 1, "LwQ": 2, "Rec": 3, "BLQ": 4, "ALQ": 5, "GLQ": 6}
 
-        bsmt_fin_cols = ['BsmtFinType1', 'BsmtFinType2']
-        for col in bsmt_fin_cols:
-            dataframe[col] = dataframe[col].map(bsmt_fin_map)
+    bsmt_fin_cols = ['BsmtFinType1', 'BsmtFinType2']
+    for col in bsmt_fin_cols:
+        dataframe[col] = dataframe[col].map(BSMT_FIN_MAP)
 
-        other_quality_cols = ['ExterQual', 'ExterCond', 'BsmtQual', 'BsmtCond',
-                              'HeatingQC', 'KitchenQual', 'FireplaceQu',
-                              'GarageQual', 'GarageCond', 'PoolQC']
-        for col in other_quality_cols:
-            dataframe[col] = dataframe[col].map(quality_map)
+    other_quality_cols = ['ExterQual', 'ExterCond', 'BsmtQual', 'BsmtCond',
+                          'HeatingQC', 'KitchenQual', 'FireplaceQu',
+                          'GarageQual', 'GarageCond', 'PoolQC']
+    for col in other_quality_cols:
+        dataframe[col] = dataframe[col].map(QUALITY_MAP)
 
-        dataframe["QualityScore"] = dataframe[other_quality_cols].sum(axis=1) + dataframe[bsmt_fin_cols].sum(axis=1) + \
-                                    dataframe['OverallQual'] + dataframe[
-                                        'OverallCond']
-        dataframe["Total_Bath"] = dataframe["BsmtFullBath"] + dataframe["BsmtHalfBath"] + dataframe["FullBath"] + \
-                                  dataframe["HalfBath"]
-        dataframe['IS_RENOVATED'] = (dataframe['YearRemodAdd'] != dataframe['YearBuilt']).astype(int)
-        dataframe['YearsSinceRemodel'] = dataframe['YrSold'] - dataframe['YearRemodAdd']
-        dataframe.loc[dataframe['YearsSinceRemodel'] < 0, 'YearsSinceRemodel'] = 0
+    dataframe["QualityScore"] = dataframe[other_quality_cols].sum(axis=1) + dataframe[bsmt_fin_cols].sum(axis=1) + \
+                                dataframe['OverallQual'] + dataframe[
+                                    'OverallCond']
+    dataframe["Total_Bath"] = dataframe["BsmtFullBath"] + dataframe["BsmtHalfBath"] + dataframe["FullBath"] + \
+                              dataframe["HalfBath"]
+    dataframe['IS_RENOVATED'] = (dataframe['YearRemodAdd'] != dataframe['YearBuilt']).astype(int)
+    dataframe['YearsSinceRemodel'] = dataframe['YrSold'] - dataframe['YearRemodAdd']
+    dataframe.loc[dataframe['YearsSinceRemodel'] < 0, 'YearsSinceRemodel'] = 0
 
-        # grab_col_names güncelle
-        cat_cols, num_cols, cat_but_car = grab_col_names(dataframe)
-        num_cols.remove("MSSubClass")
-        num_cols.remove("MoSold")
-        cat_cols.append("MSSubClass")
-        cat_cols.append("MoSold")
+    cat_cols, num_cols, cat_but_car = update_cols(dataframe)
 
-        # Outlier
-        discrete_cols = ['OverallQual', 'TotRmsAbvGrd', '3SsnPorch', 'LowQualFinSF']
-        year_cols = ['YearBuilt', 'YearRemodAdd', 'GarageYrBlt']
-        exclude = ['Id', 'SalePrice'] + discrete_cols + year_cols
-        continuous_cols = [col for col in num_cols if col not in exclude]
+    # Outlier
+    discrete_cols = ['OverallQual', 'TotRmsAbvGrd', '3SsnPorch', 'LowQualFinSF']
+    year_cols = ['YearBuilt', 'YearRemodAdd', 'GarageYrBlt']
+    exclude = ['Id', 'SalePrice'] + discrete_cols + year_cols
+    continuous_cols = [col for col in num_cols if col not in exclude]
 
-        for col in continuous_cols:
-            replace_with_thresholds(dataframe, col)
+    for col in continuous_cols:
+        replace_with_thresholds(dataframe, col)
 
-        cat_cols, num_cols, cat_but_car = grab_col_names(dataframe)
-        num_cols.remove("MSSubClass")
-        num_cols.remove("MoSold")
-        cat_cols.append("MSSubClass")
-        cat_cols.append("MoSold")
+    cat_cols, num_cols, cat_but_car = update_cols(dataframe)
 
-        dataframe = rare_encoder(dataframe, 0.01)
+    dataframe = rare_encoder(dataframe, 0.01)
 
-        # Label Encode
-        dataframe = label_encoder(dataframe, "CentralAir")
+    # Label Encode
+    dataframe = label_encoder(dataframe, "CentralAir")
 
-        # One Hot Encode
-        cat_cols, num_cols, cat_but_car = grab_col_names(dataframe, car_th=30)
-        ohe_cols = [col for col in cat_cols if dataframe[col].dtype == 'object']
-        dataframe = one_hot_encoder(dataframe, ohe_cols, drop_first=True)
+    # One Hot Encode
+    cat_cols, num_cols, cat_but_car = grab_col_names(dataframe, car_th=30)
+    ohe_cols = [col for col in cat_cols if dataframe[col].dtype == 'object']
+    dataframe = one_hot_encoder(dataframe, ohe_cols, drop_first=True)
 
-        # Scaling
-        cat_cols, num_cols, cat_but_car = grab_col_names(dataframe)
-        scaler = RobustScaler()
-        scale_cols = [col for col in num_cols if col not in ['SalePrice', 'Id']]
-        dataframe[scale_cols] = scaler.fit_transform(dataframe[scale_cols])
+    # Scaling
+    cat_cols, num_cols, cat_but_car = update_cols(dataframe)
+    scaler = RobustScaler()
+    scale_cols = [col for col in num_cols if col not in ['SalePrice', 'Id']]
+    dataframe[scale_cols] = scaler.fit_transform(dataframe[scale_cols])
 
-        y = dataframe["SalePrice"]
-        X = dataframe.drop(["SalePrice"], axis=1)
-        return X, y
+    y = dataframe["SalePrice"]
+    X = dataframe.drop(["SalePrice"], axis=1)
+    return X, y

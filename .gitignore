@@ -1,2 +1,4 @@
 .idea
 __pycache__
+datasets
+voting_reg.pkl
